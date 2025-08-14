@@ -200,4 +200,5 @@
         async function checkBusinessTier() { try { const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Purchase_Log!D2:E' }); const lifetimeTotal = (response.result.values || []).reduce((sum, row) => sum + ((parseInt(row[0]) || 0) * (parseFloat(row[1]) || 0)), 0); let newTier = 'Starter'; if (lifetimeTotal >= 5000000) newTier = 'Diamond'; else if (lifetimeTotal >= 1500000) newTier = 'Platinum'; else if (lifetimeTotal >= 500000) newTier = 'Gold'; else if (lifetimeTotal >= 100000) newTier = 'Silver'; else if (lifetimeTotal >= 25000) newTier = 'Bronze'; if (newTier !== companyData.tier) { await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'My_Company!C2', valueInputOption: 'USER_ENTERED', resource: { values: [[newTier]] } }); alert(`Congratulations! You've been promoted to the ${newTier} tier!`); await loadCompanyInfo(); updateDashboardUI(); } } catch (err) { console.error("Error checking business tier:", err); } }
     </script>
 </body>
+
 </html>
