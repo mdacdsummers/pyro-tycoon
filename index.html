@@ -71,7 +71,7 @@
         // --- 1. CONFIGURATION ---
         const CLIENT_ID = '669296235016-hsad02vdji7hissovhrb9rhdtj58s34k.apps.googleusercontent.com'; // <--- IMPORTANT: PASTE YOUR CLIENT ID HERE
         const API_KEY = 'AIzaSyAJ05PWrO322D4Zj5tSGIDjnLAUQRe0NuI'; // Although not always needed for OAuth2, it's good practice
-        const SPREADSHEET_ID = '1XYOFau0aQ1T0TMAaIBvPESIcnNJieyobnNxjFDgzSoQ'; // <--- IMPORTANT: PASTE YOUR SPREADSHEET ID HERE
+        const SPREADSHEET_ID = '1MciP2EEEC74434RKCnSIkzXS3XCtgd4EATD1ViLLPL0'; // <--- IMPORTANT: PASTE YOUR SPREADSHEET ID HERE
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
 
@@ -200,4 +200,5 @@
         async function checkBusinessTier() { try { const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Purchase_Log!D2:E' }); const lifetimeTotal = (response.result.values || []).reduce((sum, row) => sum + ((parseInt(row[0]) || 0) * (parseFloat(row[1]) || 0)), 0); let newTier = 'Starter'; if (lifetimeTotal >= 5000000) newTier = 'Diamond'; else if (lifetimeTotal >= 1500000) newTier = 'Platinum'; else if (lifetimeTotal >= 500000) newTier = 'Gold'; else if (lifetimeTotal >= 100000) newTier = 'Silver'; else if (lifetimeTotal >= 25000) newTier = 'Bronze'; if (newTier !== companyData.tier) { await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'My_Company!C2', valueInputOption: 'USER_ENTERED', resource: { values: [[newTier]] } }); alert(`Congratulations! You've been promoted to the ${newTier} tier!`); await loadCompanyInfo(); updateDashboardUI(); } } catch (err) { console.error("Error checking business tier:", err); } }
     </script>
 </body>
+
 </html>
