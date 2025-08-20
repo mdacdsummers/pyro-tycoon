@@ -10,7 +10,8 @@
         }
         body { font-family: system-ui, sans-serif; background-color: var(--dark-bg); color: var(--text-color); margin: 0; padding: 20px; }
         .hidden { display: none !important; }
-        h1, h2 { color: var(--primary-color); border-bottom: 2px solid var(--medium-bg); padding-bottom: 10px; }
+        h1, h2, h3 { color: var(--primary-color); border-bottom: 2px solid var(--medium-bg); padding-bottom: 10px; }
+        h3 { border-bottom: none; }
         button { background-color: var(--primary-color); color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 5px; font-weight: bold; }
         button:hover:not(:disabled) { background-color: #cc5200; }
         button:disabled { background-color: #555; cursor: not-allowed; }
@@ -22,23 +23,14 @@
         .stat-label { font-size: 0.9em; color: #aaa; }
         .stat-value { font-size: 1.5em; font-weight: bold; color: var(--primary-color); }
         .main-content { display: flex; gap: 20px; align-items: flex-start; }
-        .operations-section { flex: 3.5; max-height: 75vh; overflow-y: auto; }
+        .operations-section { flex: 3.5; }
         .cart-section { flex: 1.5; position: sticky; top: 20px; }
         #sales-sim-btn { background-color: #28a745; grid-column: 1 / -1; margin-top: 10px; }
         #cart-items-list { max-height: 60vh; overflow-y: auto; }
         #toggle-container { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; }
-        
-        /* NEW: Cart Item Style */
-        .cart-item {
-            display: grid;
-            grid-template-columns: 1fr auto auto auto auto;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--light-bg);
-        }
+        #monthly-special-container, #upgrades-container { background-color: var(--light-bg); border: 2px solid var(--primary-color); padding: 15px; margin: 20px 0; border-radius: 8px; }
+        .cart-item { display: grid; grid-template-columns: 1fr auto auto auto auto; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--light-bg); }
         .cart-item button { padding: 5px 10px; }
-
     </style>
 </head>
 <body>
@@ -68,25 +60,32 @@
         <div class="main-content">
             <div class="operations-section">
                 <h2>Operations</h2>
-                <button id="unbox-all-btn" style="margin-bottom: 10px;">Unbox All Low Stock (≤1)</button>
                 <div id="monthly-special-container">
                     <h3>Monthly Special!</h3>
-                    <p id="special-offer-text">Loading this month's special...</p>
+                    <p id="special-offer-text">Loading...</p>
                     <button id="buy-special-btn" class="hidden">Accept Special Offer</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Wholesale Cost</th>
-                            <th>Cases (Warehouse)</th>
-                            <th>Pieces (Store)</th>
-                            <th>Cases (In Transit)</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="operations-display"></tbody>
-                </table>
+                <div id="upgrades-container">
+                    <h3>Business Upgrades</h3>
+                    <div id="upgrades-display" style="text-align: center;">
+                        </div>
+                </div>
+                <button id="unbox-all-btn" style="margin-bottom: 10px;">Unbox All Low Stock (≤1)</button>
+                <div style="max-height: 75vh; overflow-y: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Wholesale Cost</th>
+                                <th>Cases (Warehouse)</th>
+                                <th>Pieces (Store)</th>
+                                <th>Cases (In Transit)</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="operations-display"></tbody>
+                    </table>
+                </div>
             </div>
             <div class="cart-section">
                 <h2>Purchase Order</h2>
@@ -107,15 +106,15 @@
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
     <script>
         // --- 1. CONFIGURATION ---
-        const CLIENT_ID = '669296235016-hsad02vdji7hissovhrb9rhdtj58s34k.apps.googleusercontent.com'; // <--- IMPORTANT: PASTE YOUR CLIENT ID HERE
+       const CLIENT_ID = '669296235016-hsad02vdji7hissovhrb9rhdtj58s34k.apps.googleusercontent.com'; // <--- IMPORTANT: PASTE YOUR CLIENT ID HERE
         const API_KEY = 'AIzaSyAJ05PWrO322D4Zj5tSGIDjnLAUQRe0NuI'; // Although not always needed for OAuth2, it's good practice
-        const SPREADSHEET_ID = '1MciP2EEEC74434RKCnSIkzXS3XCtgd4EATD1ViLLPL0'; // <--- IMPORTANT: PASTE YOUR SPREADSHEET ID HERE
+        const SPREADSHEET_ID = '1MciP2EEEC74434RKCnSIkzXS3XCtgd4EATD1ViLLPL0';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
 
         // --- STATE & DOM ---
         let tokenClient, gapiInited = false, gisInited = false;
-        let companyData = {}, products = new Map(), cart = [], inventory = new Map(), inTransit = new Map(), events = [];
+        let gameSettings = {}, companyData = {}, products = new Map(), cart = [], inventory = new Map(), inTransit = new Map(), events = [];
         const authorizeButton = document.getElementById('authorize_button'), signoutButton = document.getElementById('signout_button');
         const gameContent = document.getElementById('game-content'), checkoutButton = document.getElementById('checkout-button');
         const cartList = document.getElementById('cart-items-list'), cartSummary = document.getElementById('cart-summary');
@@ -123,6 +122,7 @@
         const addAllBtn = document.getElementById('add-all-btn'), unboxAllBtn = document.getElementById('unbox-all-btn');
         const freshStartBtn = document.getElementById('fresh-start-btn'), sevenDayToggle = document.getElementById('seven-day-toggle');
         const specialOfferText = document.getElementById('special-offer-text'), buySpecialBtn = document.getElementById('buy-special-btn');
+        const upgradesDisplay = document.getElementById('upgrades-display');
 
         // --- INITIALIZATION & AUTH ---
         authorizeButton.onclick = handleAuthClick;
@@ -155,6 +155,7 @@
         }
         function maybeAttemptSilentSignIn() { if (gapiInited && gisInited) { tokenClient.requestAccessToken({ prompt: '' }); } }
         function handleAuthClick() { if (gapiInited && gisInited) { tokenClient.requestAccessToken({ prompt: 'consent' }); } }
+        
         function handleSignoutClick() {
             const token = gapi.client.getToken();
             if (token) {
@@ -166,6 +167,7 @@
                 gameContent.classList.add('hidden');
             }
         }
+        
         async function showGameUI() {
             authorizeButton.classList.add('hidden');
             signoutButton.classList.remove('hidden');
@@ -177,21 +179,28 @@
         // --- DATA LOADING & RENDERING ---
         async function loadGameData() {
             try {
+                await loadSettingsData();
                 await loadProductCatalog();
                 await Promise.all([loadCompanyInfo(), loadInventoryData(), loadInTransitData(), loadEventsData()]);
                 renderAll();
-            } catch (err) { console.error("Fatal error loading game data:", err); alert("A critical error occurred. Please check the console (F12)."); }
+            } catch (err) { console.error("Fatal error loading game data:", err); alert(`A critical error occurred: ${err.message}. Please check the console (F12).`); }
+        }
+
+        async function loadSettingsData() {
+            const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Settings!A2:B' });
+            gameSettings = {};
+            (res.result.values || []).forEach(row => { gameSettings[row[0]] = row[1]; });
         }
 
         async function loadProductCatalog() {
-            const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Products!A2:M' });
+            const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Products!A2:N' });
             products.clear();
-            (res.result.values || []).forEach(p => { if (p[0]) { products.set(p[0], { sku: p[0], name: p[1], category: p[2], wholesaleCost: parseFloat(p[6]), retailPrice: parseFloat(p[7]), piecesPerCase: parseInt(p[8]) || 1, sqft: parseInt(p[9]) || 1, salesMultiplier: parseFloat(p[12]) || 1.0 }); } });
+            (res.result.values || []).forEach(p => { if (p[0]) { products.set(p[0], { sku: p[0], name: p[1], category: p[2], wholesaleCost: parseFloat(p[6]), retailPrice: parseFloat(p[7]), piecesPerCase: parseInt(p[8]) || 1, sqft: parseInt(p[9]) || 1, salesMultiplier: parseFloat(p[12]) || 1.0, shelfLimit: parseInt(p[13]) || 10 }); } });
         }
 
         async function loadCompanyInfo() {
             const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'My_Company!A2:P2' });
-            const data = res.result.values[0] || [];
+            const data = res.result.values ? res.result.values[0] : [];
             companyData = { name: data[0], cash: parseFloat(data[1]) || 0, tier: data[2], date: data[3], businessLoanBalance: parseFloat(data[4]) || 0, realEstateLoanBalance: parseFloat(data[5]) || 0, monthlyOverhead: parseFloat(data[6]) || 0, warehouse1Size: parseInt(data[7]) || 0, warehouse1Multiplier: parseInt(data[8]) || 0, warehouse2Owned: data[9] === 'TRUE', warehouse2Multiplier: parseInt(data[10]) || 0, isOverCapacity: data[11] === 'TRUE', specialOfferSKU: data[12], specialOfferCases: parseInt(data[13]) || 0, specialOfferDiscount: parseFloat(data[14]) || 0, specialOfferPurchased: data[15] === 'TRUE' };
             const currentMonth = new Date(companyData.date).getMonth();
             companyData.demandMultiplier = 0.3;
@@ -204,20 +213,20 @@
             let rowNum = 2;
             (res.result.values || []).forEach(row => { if (row[0]) { inventory.set(row[0], { sku: row[0], name: row[1], casesInWarehouse: parseInt(row[2]) || 0, piecesInStore: parseInt(row[3]) || 0, piecesPerCase: parseInt(row[4]) || 0, rowNum: rowNum }); } rowNum++; });
         }
-
+        
         async function loadInTransitData() {
             const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'In-Transit_Orders!B2:C' });
             inTransit.clear();
             (res.result.values || []).forEach(row => { if (row[0]) { const sku = row[0]; const cases = parseInt(row[1]) || 0; inTransit.set(sku, (inTransit.get(sku) || 0) + cases); } });
         }
-
+        
         async function loadEventsData() {
             const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Events!A2:D' });
             events = (res.result.values || []).map(row => ({ name: row[0], startDate: new Date(row[1]), endDate: new Date(row[2]), multiplier: parseFloat(row[3]) || 1 }));
         }
-
-        function renderAll() { updateDashboardUI(); renderOperationsView(); renderCart(); updateSimulateButton(); renderMonthlySpecial(); }
-
+        
+        function renderAll() { updateDashboardUI(); renderOperationsView(); renderCart(); updateSimulateButton(); renderMonthlySpecial(); renderUpgrades(); }
+        
         function updateDashboardUI() {
             const date = new Date(companyData.date);
             const options = { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' };
@@ -232,11 +241,12 @@
             let totalSqFtUsed = 0, totalInTransitSqFt = 0;
             inventory.forEach(item => totalSqFtUsed += (products.get(item.sku)?.sqft || 0) * item.casesInWarehouse);
             inTransit.forEach((cases, sku) => totalInTransitSqFt += (products.get(sku)?.sqft || 0) * cases);
-            const totalEffectiveSpace = companyData.warehouse1Size * companyData.warehouse1Multiplier;
+            let totalEffectiveSpace = companyData.warehouse1Size * companyData.warehouse1Multiplier;
+            if(companyData.warehouse2Owned) { totalEffectiveSpace += 1200 * companyData.warehouse2Multiplier; }
             document.getElementById('company-warehouse').innerText = `${totalSqFtUsed.toLocaleString()} / ${totalEffectiveSpace.toLocaleString()} SqFt`;
             document.getElementById('in-transit-sqft').innerText = `${totalInTransitSqFt.toLocaleString()} SqFt`;
         }
-
+        
         function renderOperationsView() {
             operationsDisplay.innerHTML = "";
             products.forEach(product => {
@@ -263,13 +273,7 @@
             cart.forEach(item => {
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'cart-item';
-                itemDiv.innerHTML = `
-                    <div><strong>${item.name}</strong><br>$${(item.wholesaleCost * item.quantity).toFixed(2)}</div>
-                    <button class="cart-btn-minus">-</button>
-                    <span>${item.quantity}</span>
-                    <button class="cart-btn-plus">+</button>
-                    <button class="cart-btn-remove">&times;</button>
-                `;
+                itemDiv.innerHTML = `<div><strong>${item.name}</strong><br>$${(item.wholesaleCost * item.quantity).toFixed(2)}</div><button class="cart-btn-minus">-</button><span>${item.quantity}</span><button class="cart-btn-plus">+</button><button class="cart-btn-remove">&times;</button>`;
                 itemDiv.querySelector('.cart-btn-minus').addEventListener('click', () => updateCartQuantity(item.sku, -1));
                 itemDiv.querySelector('.cart-btn-plus').addEventListener('click', () => updateCartQuantity(item.sku, 1));
                 itemDiv.querySelector('.cart-btn-remove').addEventListener('click', () => removeFromCart(item.sku));
@@ -289,7 +293,7 @@
                 checkoutButton.innerText = 'Place Order';
             }
         }
-
+        
         function updateSimulateButton() {
             const isOffSeason = (companyData.demandMultiplier || 0.3) < 0.6;
             const isSaturdaysOnly = !sevenDayToggle.checked;
@@ -322,7 +326,81 @@
             }
         }
 
+        function renderUpgrades() {
+            upgradesDisplay.innerHTML = '';
+            if (companyData.warehouse1Multiplier < 4) {
+                const cost = 10000;
+                const btn = document.createElement('button');
+                btn.textContent = `Upgrade Warehouse 1 Shelving ($${cost.toLocaleString()})`;
+                btn.disabled = companyData.cash < cost;
+                btn.onclick = () => upgradeWarehouse(1, 4, cost);
+                upgradesDisplay.appendChild(btn);
+            }
+            else if (!companyData.warehouse2Owned) {
+                const cost = 60000;
+                const btn = document.createElement('button');
+                btn.textContent = `Purchase Second Warehouse ($${cost.toLocaleString()})`;
+                btn.disabled = companyData.cash < cost;
+                btn.onclick = () => purchaseWarehouse2(cost);
+                upgradesDisplay.appendChild(btn);
+            }
+            else if (companyData.warehouse2Multiplier < 6) {
+                const cost = 20000;
+                const nextMultiplier = companyData.warehouse2Multiplier + 2;
+                const btn = document.createElement('button');
+                btn.textContent = `Upgrade Warehouse 2 Shelving to ${nextMultiplier}x ($${cost.toLocaleString()})`;
+                btn.disabled = companyData.cash < cost;
+                btn.onclick = () => upgradeWarehouse(2, nextMultiplier, cost);
+                upgradesDisplay.appendChild(btn);
+            } else {
+                upgradesDisplay.innerText = "All warehouse upgrades purchased!";
+            }
+        }
+        
         // --- GAME LOGIC ---
+        function calculateTotals() {
+            const subtotal = cart.reduce((sum, item) => sum + (item.wholesaleCost * item.quantity), 0);
+            let discountRate = 0;
+            if (subtotal >= 100000) discountRate = 0.50; else if (subtotal >= 50000) discountRate = 0.45; else if (subtotal >= 25000) discountRate = 0.35;
+            else if (subtotal >= 10000) discountRate = 0.25; else if (subtotal >= 5000) discountRate = 0.15;
+            const discount = subtotal * discountRate;
+            return { subtotal, discount, total: subtotal - discount };
+        }
+
+        async function startFreshGame() {
+            if (!confirm("Are you sure? This will erase all progress.")) return;
+            freshStartBtn.disabled = true; freshStartBtn.innerText = 'Resetting...';
+            try {
+                const startingCart = Array.from(products.values()).map(p => ({ ...p, quantity: 3 }));
+                const subtotal = startingCart.reduce((sum, item) => sum + (item.wholesaleCost * item.quantity), 0);
+                let discountRate = 0;
+                if (subtotal >= 100000) discountRate = 0.50; else if (subtotal >= 50000) discountRate = 0.45; else if (subtotal >= 25000) discountRate = 0.35;
+                else if (subtotal >= 10000) discountRate = 0.25; else if (subtotal >= 5000) discountRate = 0.15;
+                const totalCost = subtotal * (1 - discountRate);
+                const startingDate = gameSettings.Start_Date || '4/1/2025';
+                const startingCash = (parseFloat(gameSettings.Start_Cash) || 50000) - totalCost;
+                const startBizLoan = parseFloat(gameSettings.Start_Business_Loan) || 50000;
+                const startReLoan = parseFloat(gameSettings.Start_Real_Estate_Loan) || 200000;
+                const startWhSize = parseInt(gameSettings.Warehouse_1_Size) || 600;
+                const startWhMultiplier = parseInt(gameSettings.Warehouse_1_Multiplier) || 2;
+                const purchaseId = `PO-START-${Date.now()}`;
+                const purchaseLogData = startingCart.map(item => { const actualPricePaid = item.wholesaleCost * (1 - discountRate); return [`${purchaseId}-${item.sku}`, startingDate, item.sku, item.quantity, actualPricePaid]; });
+                const inventoryData = startingCart.map(item => [item.sku, item.name, item.quantity, 0, item.piecesPerCase]);
+                const myCompanyData = [ 'WhatTheBoom', startingCash, 'Starter', startingDate, startBizLoan, startReLoan, 3235.23, startWhSize, startWhMultiplier, 'FALSE', 0, 'FALSE', null, null, null, 'FALSE' ];
+                await gapi.client.sheets.spreadsheets.values.batchClear({ spreadsheetId: SPREADSHEET_ID, resource: { ranges: ['Purchase_Log!A2:E', 'Sales_Log!A2:G', 'Inventory!A2:E', 'In-Transit_Orders!A2:D'] } });
+                await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'My_Company!A2', valueInputOption: 'USER_ENTERED', resource: { values: [myCompanyData] } });
+                await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'Inventory!A2', valueInputOption: 'USER_ENTERED', resource: { values: inventoryData } });
+                await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_ID, range: 'Purchase_Log!A1', valueInputOption: 'USER_ENTERED', resource: { values: purchaseLogData } });
+                alert('Fresh game started! Your initial inventory is in the warehouse.');
+            } catch (err) {
+                console.error("Error starting fresh game:", err);
+                alert("An error occurred while trying to reset the game.");
+            } finally {
+                freshStartBtn.disabled = false; freshStartBtn.innerText = 'Start Fresh Game';
+                await loadGameData();
+            }
+        }
+        
         function addAllToCart() {
             cart = [];
             products.forEach(product => cart.push({ ...product, quantity: 1 }));
@@ -333,9 +411,12 @@
             unboxAllBtn.disabled = true;
             const updatesForSheet = []; let unboxedCount = 0;
             for (const item of inventory.values()) {
-                if (item.piecesInStore <= 1 && item.casesInWarehouse > 0) {
-                    item.casesInWarehouse--; item.piecesInStore += item.piecesPerCase; unboxedCount++;
-                    updatesForSheet.push({ range: `Inventory!C${item.rowNum}:D${item.rowNum}`, values: [[item.casesInWarehouse, item.piecesInStore]] });
+                const product = products.get(item.sku);
+                if (item.piecesInStore <= 1 && item.casesInWarehouse > 0 && product) {
+                    if (item.piecesInStore + product.piecesPerCase <= product.shelfLimit) {
+                        item.casesInWarehouse--; item.piecesInStore += item.piecesPerCase; unboxedCount++;
+                        updatesForSheet.push({ range: `Inventory!C${item.rowNum}:D${item.rowNum}`, values: [[item.casesInWarehouse, item.piecesInStore]] });
+                    }
                 }
             }
             if (unboxedCount > 0) {
@@ -346,7 +427,7 @@
                     console.error("Failed to batch unbox:", err); alert("An error occurred. Please refresh.");
                     await loadGameData();
                 }
-            } else { alert("No items needed unboxing."); }
+            } else { alert("No items needed unboxing (or no shelf space available)."); }
             renderAll();
             unboxAllBtn.disabled = false;
         }
@@ -367,29 +448,25 @@
             cart = cart.filter(item => item.sku !== sku);
             renderCart();
         }
-        
-        function calculateTotals() {
-            const subtotal = cart.reduce((sum, item) => sum + (item.wholesaleCost * item.quantity), 0);
-            let discountRate = 0;
-            if (subtotal >= 100000) discountRate = 0.50; else if (subtotal >= 50000) discountRate = 0.45; else if (subtotal >= 25000) discountRate = 0.35;
-            else if (subtotal >= 10000) discountRate = 0.25; else if (subtotal >= 5000) discountRate = 0.15;
-            const discount = subtotal * discountRate;
-            return { subtotal, discount, total: subtotal - discount };
-        }
 
         async function moveCaseToStore(sku) {
             const item = inventory.get(sku);
-            if (!item || item.casesInWarehouse <= 0) return;
+            const product = products.get(sku);
+            if (!item || !product || item.casesInWarehouse <= 0) return;
+            if (item.piecesInStore + product.piecesPerCase > product.shelfLimit) {
+                alert(`Not enough shelf space! Unboxing this case would put you over the limit of ${product.shelfLimit} pieces for this item.`);
+                return;
+            }
             document.querySelector(`.unbox-btn[data-sku="${sku}"]`).disabled = true;
             item.casesInWarehouse--;
-            item.piecesInStore += item.piecesPerCase;
+            item.piecesInStore += product.piecesPerCase;
             renderAll();
             try {
                 await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: `Inventory!C${item.rowNum}:D${item.rowNum}`, valueInputOption: "USER_ENTERED", resource: { values: [[item.casesInWarehouse, item.piecesInStore]] } });
             } catch (err) {
                 console.error("Failed to update inventory:", err);
                 item.casesInWarehouse++;
-                item.piecesInStore -= item.piecesPerCase;
+                item.piecesInStore -= product.piecesPerCase;
                 renderAll();
                 alert("Error saving changes. Please refresh.");
             }
@@ -400,9 +477,8 @@
             const product = products.get(companyData.specialOfferSKU);
             const totalCost = product.wholesaleCost * companyData.specialOfferCases * (1 - companyData.specialOfferDiscount);
             if(totalCost > companyData.cash) {
-                alert("You don't have enough cash to accept this offer.");
-                renderMonthlySpecial();
-                return;
+                alert("You don't have enough cash.");
+                renderMonthlySpecial(); return;
             }
             const newCash = companyData.cash - totalCost;
             const purchaseId = `PO-SPECIAL-${Date.now()}`;
@@ -415,7 +491,7 @@
                 await gapi.client.sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SPREADSHEET_ID, resource: { valueInputOption: 'USER_ENTERED', data: [ { range: 'My_Company!B2', values: [[newCash]] }, { range: 'My_Company!P2', values: [['TRUE']] } ]}});
                 await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_ID, range: 'Purchase_Log!A1', valueInputOption: 'USER_ENTERED', resource: { values: [purchaseLogEntry] } });
                 await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_ID, range: 'In-Transit_Orders!A1', valueInputOption: 'USER_ENTERED', resource: { values: [inTransitEntry] } });
-                alert(`Special offer purchased! Your shipment of ${companyData.specialOfferCases} cases of ${product.name} will arrive on ${arrivalDateString}.`);
+                alert(`Special offer purchased! Shipment will arrive on ${arrivalDateString}.`);
             } catch (err) {
                 console.error("Error purchasing special offer:", err);
                 alert("An error occurred while purchasing the special offer.");
@@ -471,9 +547,7 @@
             const inTransitOrders = res.result.values || [];
             if (inTransitOrders.length === 0) return 0;
             const arrivedShipments = [], stillInTransit = [];
-            
             inTransitOrders.forEach(order => { if (order && order[0]) { (new Date(order[3]) <= dateToCheck) ? arrivedShipments.push({ sku: order[1], cases: parseInt(order[2]) }) : stillInTransit.push(order); } });
-            
             if (arrivedShipments.length > 0) {
                 arrivedShipments.forEach(shipment => {
                     const item = inventory.get(shipment.sku);
@@ -491,37 +565,7 @@
             return 0;
         }
         
-        async function startFreshGame() {
-            if (!confirm("Are you sure? This will erase all progress.")) return;
-            freshStartBtn.disabled = true; freshStartBtn.innerText = 'Resetting...';
-            try {
-                const startingCart = Array.from(products.values()).map(p => ({ ...p, quantity: 3 }));
-                const subtotal = startingCart.reduce((sum, item) => sum + (item.wholesaleCost * item.quantity), 0);
-                let discountRate = 0;
-                if (subtotal >= 100000) discountRate = 0.50; else if (subtotal >= 50000) discountRate = 0.45; else if (subtotal >= 25000) discountRate = 0.35;
-                else if (subtotal >= 10000) discountRate = 0.25; else if (subtotal >= 5000) discountRate = 0.15;
-                const totalCost = subtotal * (1 - discountRate);
-                const startingDate = '4/1/2025';
-                const startingCash = 50000 - totalCost;
-                const purchaseId = `PO-START-${Date.now()}`;
-                const purchaseLogData = startingCart.map(item => { const actualPricePaid = item.wholesaleCost * (1 - discountRate); return [`${purchaseId}-${item.sku}`, startingDate, item.sku, item.quantity, actualPricePaid]; });
-                const inventoryData = startingCart.map(item => [item.sku, item.name, item.quantity, 0, item.piecesPerCase]);
-                const myCompanyData = [ 'WhatTheBoom', startingCash, 'Starter', startingDate, 50000, 200000, 3235.23, 600, 2, 'FALSE', 0, 'FALSE' ];
-                await gapi.client.sheets.spreadsheets.values.batchClear({ spreadsheetId: SPREADSHEET_ID, resource: { ranges: ['Purchase_Log!A2:E', 'Sales_Log!A2:G', 'Inventory!A2:E', 'In-Transit_Orders!A2:D'] } });
-                await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'My_Company!A2', valueInputOption: 'USER_ENTERED', resource: { values: [myCompanyData] } });
-                await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'Inventory!A2', valueInputOption: 'USER_ENTERED', resource: { values: inventoryData } });
-                await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_ID, range: 'Purchase_Log!A1', valueInputOption: 'USER_ENTERED', resource: { values: purchaseLogData } });
-                alert('Fresh game started! Your initial inventory is in the warehouse.');
-            } catch (err) {
-                console.error("Error starting fresh game:", err);
-                alert("An error occurred while trying to reset the game.");
-            } finally {
-                freshStartBtn.disabled = false; freshStartBtn.innerText = 'Start Fresh Game';
-                await loadGameData();
-            }
-        }
-
-      async function simulateSales() {
+        async function simulateSales() {
             salesSimBtn.disabled = true;
             salesSimBtn.textContent = 'Simulating...';
             try {
@@ -530,7 +574,6 @@
                 const isWeekMode = isSaturdaysOnly && isOffSeason;
 
                 if (isWeekMode) {
-                    // --- Full Week Simulation Logic ---
                     let weeklyRevenue = 0, weeklySalesLog = [], arrivedShipmentsCount = 0, weeklyBillsPaid = false;
                     let currentDate = new Date(companyData.date);
                     for (let i = 0; i < 7; i++) {
@@ -557,6 +600,7 @@
                         if (nextDayCheck.getMonth() !== currentMonth) { weeklyBillsPaid = true; }
                         currentDate.setDate(currentDate.getDate() + 1);
                     }
+
                     const finalInventoryData = Array.from(inventory.values()).map(i => [i.sku, i.name, i.casesInWarehouse, i.piecesInStore, i.piecesPerCase]);
                     if (finalInventoryData.length > 0) { await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'Inventory!A2', valueInputOption: 'USER_ENTERED', resource: { values: finalInventoryData } }); }
                     if (weeklySalesLog.length > 0) { await gapi.client.sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_ID, range: 'Sales_Log!A:E', valueInputOption: 'USER_ENTERED', resource: { values: weeklySalesLog } }); }
@@ -564,33 +608,28 @@
                     let finalCash = companyData.cash + weeklyRevenue;
                     const dataForCompanyUpdate = [];
                     let summaryMessage = `Week Advanced!\n- Sales Revenue: $${weeklyRevenue.toFixed(2)}\n- Shipments Arrived: ${arrivedShipmentsCount}`;
-
                     if (weeklyBillsPaid) {
                         finalCash -= companyData.monthlyOverhead;
                         dataForCompanyUpdate.push({ range: 'My_Company!E2', values: [[companyData.businessLoanBalance - 1062.35]] });
                         dataForCompanyUpdate.push({ range: 'My_Company!F2', values: [[companyData.realEstateLoanBalance - 1672.88]] });
                         summaryMessage += "\n- Monthly bills were paid.";
-                        
-                        // Generate new monthly special offer
                         const productKeys = Array.from(products.keys());
                         const randomSKU = productKeys[Math.floor(Math.random() * productKeys.length)];
                         const productForOffer = products.get(randomSKU);
-                        const casesPerPallet = Math.round((16 / productForOffer.sqft) * 4);
-                        const numPallets = Math.random() < 0.7 ? 1 : 2; // 70% chance for 1 pallet, 30% for 2
-                        const offerCases = casesPerPallet * numPallets;
-                        const offerDiscount = numPallets === 1 ? 0.30 : 0.45; // 30% for 1 pallet, 45% for 2
-                        dataForCompanyUpdate.push({ range: 'My_Company!M2:P2', values: [[randomSKU, offerCases, offerDiscount, 'FALSE']] });
+                        if(productForOffer.sqft > 0) {
+                            const casesPerPallet = Math.round((16 / productForOffer.sqft) * 4);
+                            const numPallets = Math.random() < 0.7 ? 1 : 2;
+                            const offerCases = casesPerPallet * numPallets;
+                            const offerDiscount = numPallets === 1 ? 0.30 : 0.45;
+                            dataForCompanyUpdate.push({ range: 'My_Company!M2:P2', values: [[randomSKU, offerCases, offerDiscount, 'FALSE']] });
+                        }
                     }
-                    
                     dataForCompanyUpdate.push({ range: 'My_Company!B2', values: [[finalCash]] });
                     dataForCompanyUpdate.push({ range: 'My_Company!D2', values: [[currentDate.toLocaleDateString()]] });
-                    
                     if (dataForCompanyUpdate.length > 0) { await gapi.client.sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SPREADSHEET_ID, resource: { valueInputOption: 'USER_ENTERED', data: dataForCompanyUpdate } }); }
-                    
                     alert(summaryMessage);
 
-                } else {
-                    // --- Single Day Simulation Logic ---
+                } else { // Single Day Logic
                     await checkForArrivingShipments(new Date(companyData.date));
                     await loadGameData();
                     let totalSqFtUsed = 0;
@@ -599,7 +638,7 @@
                     if (totalSqFtUsed > totalEffectiveSpace) {
                         if (companyData.isOverCapacity) {
                             let leastValuableItem = null, lowestValuePerSqFt = Infinity;
-                            inventory.forEach(item => { if (item.casesInWarehouse > 0) { const product = products.get(item.sku); const valuePerSqFt = product.wholesaleCost / product.sqft; if (valuePerSqFt < lowestValuePerSqFt) { lowestValuePerSqFt = valuePerSqFt; leastValuableItem = item; } } });
+                            inventory.forEach(item => { if (item.casesInWarehouse > 0) { const product = products.get(item.sku); if(product.sqft > 0) { const valuePerSqFt = product.wholesaleCost / product.sqft; if (valuePerSqFt < lowestValuePerSqFt) { lowestValuePerSqFt = valuePerSqFt; leastValuableItem = item; } } } });
                             if (leastValuableItem) {
                                 leastValuableItem.casesInWarehouse--;
                                 await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: `Inventory!C${leastValuableItem.rowNum}`, valueInputOption: 'USER_ENTERED', resource: { values: [[leastValuableItem.casesInWarehouse]] } });
@@ -641,16 +680,16 @@
                         dataForBatchUpdate.push({ range: 'My_Company!E2', values: [[companyData.businessLoanBalance - 1062.35]] });
                         dataForBatchUpdate.push({ range: 'My_Company!F2', values: [[companyData.realEstateLoanBalance - 1672.88]] });
                         billsPaidMessage = `\nMonthly bills of $${companyData.monthlyOverhead.toFixed(2)} have been paid.`;
-                        
-                        // Generate new monthly special offer
                         const productKeys = Array.from(products.keys());
                         const randomSKU = productKeys[Math.floor(Math.random() * productKeys.length)];
                         const productForOffer = products.get(randomSKU);
-                        const casesPerPallet = Math.round((16 / productForOffer.sqft) * 4);
-                        const numPallets = Math.random() < 0.7 ? 1 : 2; // 70% chance for 1 pallet, 30% for 2
-                        const offerCases = casesPerPallet * numPallets;
-                        const offerDiscount = numPallets === 1 ? 0.30 : 0.45; // 30% for 1 pallet, 45% for 2
-                        dataForBatchUpdate.push({ range: 'My_Company!M2:P2', values: [[randomSKU, offerCases, offerDiscount, 'FALSE']] });
+                        if(productForOffer.sqft > 0) {
+                            const casesPerPallet = Math.round((16 / productForOffer.sqft) * 4);
+                            const numPallets = Math.random() < 0.7 ? 1 : 2;
+                            const offerCases = casesPerPallet * numPallets;
+                            const offerDiscount = numPallets === 1 ? 0.30 : 0.45;
+                            dataForBatchUpdate.push({ range: 'My_Company!M2:P2', values: [[randomSKU, offerCases, offerDiscount, 'FALSE']] });
+                        }
                     }
                     inventoryToUpdate.forEach(update => dataForBatchUpdate.push({ range: update.range, values: [[update.value]] }));
                     dataForBatchUpdate.push({ range: 'My_Company!B2', values: [[finalCash]] });
@@ -660,13 +699,73 @@
                     if (salesLogEntries.length > 0) { alert(`Day Advanced! You made ${salesLogEntries.length} sales for $${dailyRevenue.toFixed(2)}.` + billsPaidMessage); }
                     else { alert("A quiet day with no sales. The date has advanced." + billsPaidMessage); }
                 }
-
             } catch (err) {
                 console.error("Error during simulation:", err);
                 alert("An error occurred during simulation. Please check the console and refresh.");
             } finally {
                 salesSimBtn.disabled = false;
                 updateSimulateButton();
+                await loadGameData();
+            }
+        }
+        async function upgradeWarehouse(warehouseNum, newMultiplier, cost) {
+            if (companyData.cash < cost) {
+                alert("Insufficient funds for this upgrade!");
+                return;
+            }
+            
+            const newCash = companyData.cash - cost;
+            // Determine which column in the sheet to update based on the warehouse number
+            const range = warehouseNum === 1 ? 'My_Company!I2' : 'My_Company!K2';
+
+            try {
+                // Send both the cash deduction and the multiplier update at the same time
+                await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId: SPREADSHEET_ID,
+                    resource: {
+                        valueInputOption: 'USER_ENTERED',
+                        data: [
+                            { range: 'My_Company!B2', values: [[newCash]] },
+                            { range: range, values: [[newMultiplier]] }
+                        ]
+                    }
+                });
+                alert(`Warehouse ${warehouseNum} successfully upgraded!`);
+            } catch (err) {
+                console.error("Error upgrading warehouse:", err);
+                alert("An error occurred during the upgrade.");
+            } finally {
+                await loadGameData(); // Reload all data to reflect the change
+            }
+        }
+
+        async function purchaseWarehouse2(cost) {
+            if (companyData.cash < cost) {
+                alert("Insufficient funds to purchase warehouse!");
+                return;
+            }
+            
+            const newCash = companyData.cash - cost;
+            // Add the cost of the new warehouse to your existing real estate loan
+            const newReLoanBalance = companyData.realEstateLoanBalance + cost;
+
+            try {
+                await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId: SPREADSHEET_ID,
+                    resource: {
+                        valueInputOption: 'USER_ENTERED',
+                        data: [
+                            { range: 'My_Company!B2', values: [[newCash]] },
+                            { range: 'My_Company!F2', values: [[newReLoanBalance]] },
+                            { range: 'My_Company!J2', values: [['TRUE']] } // Set Warehouse 2 Owned to TRUE
+                        ]
+                    }
+                });
+                alert(`Successfully purchased Warehouse 2! It has a 2x multiplier to start.`);
+            } catch (err) {
+                console.error("Error purchasing warehouse:", err);
+                alert("An error occurred during the purchase.");
+            } finally {
                 await loadGameData();
             }
         }
